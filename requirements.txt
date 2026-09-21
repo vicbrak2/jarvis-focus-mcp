@@ -1,0 +1,6 @@
+mcp[cli]>=2,<3
+httpx>=0.28,<1
+starlette>=1,<2
+uvicorn[standard]>=0.53,<1
+pytest>=8,<10
+anyio>=4,<5
