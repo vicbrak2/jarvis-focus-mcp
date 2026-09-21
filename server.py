@@ -34,6 +34,7 @@ REQUEST_TIMEOUT_SECONDS = 15.0
 
 mcp = MCPServer(
     name="jarvis-focus-os",
+    version="0.1.0",
     instructions=(
         "Herramientas para gestionar las tareas personales del usuario en Jarvis FOCUS OS "
         "(un gestor de tareas con matriz de prioridad tipo Eisenhower: q1=urgente+importante, "
