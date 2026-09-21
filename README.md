@@ -37,6 +37,8 @@ See `.env.example`.
 
 ## Connecting from AI Edge Gallery
 
-In the app: Agent Skills → Skills chip → (+) → **Load MCP server from URL**,
-enter this server's `/mcp` URL, and set Authorization to Bearer with
-`MCP_AUTH_TOKEN`'s value.
+In the app: Agent Chat → MCP button → Add MCP Server, enter this server's
+`/mcp` URL, and in the header name/value fields put:
+
+- Header name: `X-MCP-Token`
+- Header value: `MCP_AUTH_TOKEN`'s value (raw, no "Bearer " prefix)

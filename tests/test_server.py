@@ -110,6 +110,29 @@ def test_mcp_endpoint_rejects_wrong_token():
     assert response.status_code == 401
 
 
+def test_mcp_endpoint_accepts_valid_tokens_bearer_and_raw_header():
+    # Reaching the real MCP session manager (not just the 401 short-circuit)
+    # needs the ASGI lifespan started, hence the context manager. mcp_app is
+    # a module-level singleton whose session manager can only run() once per
+    # process, so both checks live in a single `with` block rather than two
+    # separate tests each starting/stopping their own lifespan.
+    app = server.BearerAuthMiddleware(server.mcp_app, "secret-token")
+    with TestClient(app) as client:
+        bearer_response = client.post("/mcp", json={}, headers={"Authorization": "Bearer secret-token"})
+        # AI Edge Gallery's MCP UI is a raw "header name / header value" pair,
+        # not an Authorization-scheme picker — support that shape too.
+        raw_response = client.post("/mcp", json={}, headers={"X-MCP-Token": "secret-token"})
+    assert bearer_response.status_code != 401
+    assert raw_response.status_code != 401
+
+
+def test_mcp_endpoint_rejects_wrong_raw_token_header():
+    app = server.BearerAuthMiddleware(server.mcp_app, "secret-token")
+    client = TestClient(app)
+    response = client.post("/mcp", json={}, headers={"X-MCP-Token": "wrong"})
+    assert response.status_code == 401
+
+
 def test_auth_disabled_when_token_unset_allows_through():
     # With no token configured, requests should reach the wrapped app (not be
     # rejected at the auth layer) — same opt-in-auth convention as the other

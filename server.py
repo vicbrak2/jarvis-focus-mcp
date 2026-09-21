@@ -128,7 +128,13 @@ async def health() -> Any:
 
 
 class BearerAuthMiddleware:
-    """Requires 'Authorization: Bearer <MCP_AUTH_TOKEN>' on every request when configured.
+    """Requires the configured token on every request, accepted two ways:
+
+    - 'Authorization: Bearer <MCP_AUTH_TOKEN>' (standard bearer auth), or
+    - 'X-MCP-Token: <MCP_AUTH_TOKEN>' (raw value, no scheme prefix — matches
+      the "header name / header value" pattern AI Edge Gallery's MCP client
+      UI expects, e.g. its own Maps Grounding Lite example uses a raw key in
+      a custom header, not an Authorization/Bearer scheme).
 
     Left open (no check) if MCP_AUTH_TOKEN is unset, matching the same
     opt-in-auth convention used by llm-gateway-platform.
@@ -146,9 +152,10 @@ class BearerAuthMiddleware:
             return
         request = Request(scope, receive=receive)
         auth_header = request.headers.get("authorization", "")
-        expected = f"Bearer {self.token}"
-        if auth_header != expected:
-            response = JSONResponse({"error": "invalid or missing bearer token"}, status_code=401)
+        raw_token_header = request.headers.get("x-mcp-token", "")
+        is_valid = auth_header == f"Bearer {self.token}" or raw_token_header == self.token
+        if not is_valid:
+            response = JSONResponse({"error": "invalid or missing auth token"}, status_code=401)
             await response(scope, receive, send)
             return
         await self.app(scope, receive, send)
