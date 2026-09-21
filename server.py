@@ -59,20 +59,47 @@ async def _post(path: str, json: dict[str, Any] | None = None) -> Any:
         return response.json()
 
 
-@mcp.tool()
-async def list_tasks() -> Any:
-    """Lista todas las tareas del usuario (pendientes y completadas)."""
-    return await _get("/tasks")
+# On-device models in AI Edge Gallery run with a small context window (roughly
+# 4k-10k tokens). Jarvis FOCUS OS's own endpoints don't trim their responses,
+# so tool results here are compacted (fewer fields, capped counts) instead of
+# passing the raw API payload straight through — otherwise a broad question
+# like "what are my tasks" can overflow the model's remaining context.
+_TASK_FIELDS = ("id", "text", "quadrant", "done")
+
+
+def _compact_task(task: dict[str, Any]) -> dict[str, Any]:
+    return {k: task[k] for k in _TASK_FIELDS if k in task}
 
 
 @mcp.tool()
-async def search_tasks(query: str = "", status: str = "all", priority: str = "all", limit: int = 50) -> Any:
-    """Busca tareas por texto y filtra por estado/prioridad.
+async def list_tasks(limit: int = 15) -> Any:
+    """Resumen y hasta `limit` tareas (texto, cuadrante, si está hecha) — no todos los campos.
+
+    Para una lista más acotada o filtrada (por texto, estado o prioridad), preferí search_tasks.
+    """
+    data = await _get("/tasks")
+    tasks = [_compact_task(t) for t in data.get("tasks", [])[:limit]]
+    return {
+        "total": data.get("total"),
+        "pending": data.get("pending"),
+        "shown": len(tasks),
+        "tasks": tasks,
+    }
+
+
+@mcp.tool()
+async def search_tasks(query: str = "", status: str = "all", priority: str = "all", limit: int = 10) -> Any:
+    """Busca tareas por texto y filtra por estado/prioridad. Devuelve campos acotados (no todos).
 
     status: "all" | "active" | "completed"
     priority: "all" | "q1" | "q2" | "q3" | "q4"
+    limit: máximo de resultados (default 10, para no saturar el contexto del modelo).
     """
-    return await _get("/tasks/search", params={"q": query, "status": status, "priority": priority, "limit": limit})
+    data = await _get("/tasks/search", params={"q": query, "status": status, "priority": priority, "limit": limit})
+    return {
+        "count": data.get("count"),
+        "results": [_compact_task(t) for t in data.get("results", [])],
+    }
 
 
 @mcp.tool()
@@ -98,9 +125,12 @@ async def set_task_lane(task_id: str, lane: str) -> Any:
 
 
 @mcp.tool()
-async def get_board() -> Any:
-    """Devuelve el tablero de tareas organizado por carril/columna."""
-    return await _get("/board")
+async def get_board(limit_per_lane: int = 10) -> Any:
+    """Tablero de tareas por carril/columna, con campos acotados y tope por carril."""
+    data = await _get("/board")
+    lanes = {"focus", "quick"} & data.keys()
+    board = {lane: [_compact_task(t) for t in data[lane][:limit_per_lane]] for lane in lanes}
+    return {**board, "counts": data.get("counts")}
 
 
 @mcp.tool()

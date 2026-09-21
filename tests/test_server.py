@@ -7,13 +7,42 @@ from starlette.testclient import TestClient
 import server
 
 
+def _fake_task(i: int) -> dict:
+    return {
+        "id": f"t{i}",
+        "text": f"Tarea {i}",
+        "quadrant": "q2",
+        "done": False,
+        "energy": "alto",
+        "createdAt": "2026-06-13T15:38:35.424Z",
+        "updatedAt": "2026-06-15T04:53:10.526Z",
+        "minutes": 40,
+    }
+
+
 class _Recorder:
     def __init__(self):
         self.requests: list[httpx.Request] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        return httpx.Response(200, json={"ok": True, "path": request.url.path})
+        path = request.url.path
+        if path == "/tasks":
+            tasks = [_fake_task(i) for i in range(20)]
+            return httpx.Response(200, json={"total": 20, "pending": 18, "tasks": tasks})
+        if path == "/tasks/search":
+            results = [_fake_task(i) for i in range(20)]
+            return httpx.Response(200, json={"count": 20, "results": results})
+        if path == "/board":
+            return httpx.Response(
+                200,
+                json={
+                    "focus": [_fake_task(i) for i in range(15)],
+                    "quick": [_fake_task(i) for i in range(3)],
+                    "counts": {"focus": 15, "quick": 3},
+                },
+            )
+        return httpx.Response(200, json={"ok": True, "path": path})
 
 
 @pytest.fixture
@@ -34,9 +63,20 @@ def mock_jarvis(monkeypatch):
 
 @pytest.mark.anyio
 async def test_list_tasks_calls_expected_path(mock_jarvis):
-    result = await server.list_tasks()
-    assert result == {"ok": True, "path": "/tasks"}
+    await server.list_tasks()
     assert mock_jarvis.requests[0].method == "GET"
+    assert mock_jarvis.requests[0].url.path == "/tasks"
+
+
+@pytest.mark.anyio
+async def test_list_tasks_caps_count_and_strips_verbose_fields(mock_jarvis):
+    # 20 fake tasks exist upstream; the on-device model's context is small,
+    # so the tool must cap the count and drop non-essential fields.
+    result = await server.list_tasks(limit=5)
+    assert result["total"] == 20
+    assert result["shown"] == 5
+    assert len(result["tasks"]) == 5
+    assert set(result["tasks"][0].keys()) == {"id", "text", "quadrant", "done"}
 
 
 @pytest.mark.anyio
@@ -48,6 +88,22 @@ async def test_search_tasks_passes_query_params(mock_jarvis):
     assert req.url.params["status"] == "active"
     assert req.url.params["priority"] == "q1"
     assert req.url.params["limit"] == "5"
+
+
+@pytest.mark.anyio
+async def test_search_tasks_strips_verbose_fields(mock_jarvis):
+    result = await server.search_tasks(query="tarea")
+    assert result["count"] == 20
+    assert set(result["results"][0].keys()) == {"id", "text", "quadrant", "done"}
+
+
+@pytest.mark.anyio
+async def test_get_board_caps_per_lane_and_strips_verbose_fields(mock_jarvis):
+    result = await server.get_board(limit_per_lane=5)
+    assert len(result["focus"]) == 5
+    assert len(result["quick"]) == 3
+    assert result["counts"] == {"focus": 15, "quick": 3}
+    assert set(result["focus"][0].keys()) == {"id", "text", "quadrant", "done"}
 
 
 @pytest.mark.anyio
