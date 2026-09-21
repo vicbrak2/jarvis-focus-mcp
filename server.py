@@ -17,8 +17,11 @@ Run:
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
+
+logger = logging.getLogger("jarvis_focus_mcp")
 
 import httpx
 from mcp.server.mcpserver import MCPServer
@@ -158,6 +161,17 @@ class BearerAuthMiddleware:
         raw_token_header = request.headers.get("x-mcp-token", "").strip()
         is_valid = auth_header == f"Bearer {self.token}" or raw_token_header == self.token
         if not is_valid:
+            # TEMP DEBUG (2026-09-21): logging what actually arrives to diagnose
+            # repeated 401s from the app despite what looks like the right token.
+            # Remove once diagnosed — these are Railway's own private logs, never
+            # exposed to the client, but still shouldn't linger in the codebase.
+            logger.warning(
+                "auth mismatch: headers=%s authorization=%r x-mcp-token=%r expected_len=%d",
+                dict(request.headers),
+                auth_header,
+                raw_token_header,
+                len(self.token),
+            )
             response = JSONResponse({"error": "invalid or missing auth token"}, status_code=401)
             await response(scope, receive, send)
             return
