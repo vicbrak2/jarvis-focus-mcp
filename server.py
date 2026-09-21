@@ -151,8 +151,11 @@ class BearerAuthMiddleware:
             await self.app(scope, receive, send)
             return
         request = Request(scope, receive=receive)
-        auth_header = request.headers.get("authorization", "")
-        raw_token_header = request.headers.get("x-mcp-token", "")
+        # Strip stray leading/trailing whitespace (e.g. a trailing newline
+        # picked up when copy-pasting the token from a chat code block, or
+        # from the app's own header-value input) before comparing.
+        auth_header = request.headers.get("authorization", "").strip()
+        raw_token_header = request.headers.get("x-mcp-token", "").strip()
         is_valid = auth_header == f"Bearer {self.token}" or raw_token_header == self.token
         if not is_valid:
             response = JSONResponse({"error": "invalid or missing auth token"}, status_code=401)

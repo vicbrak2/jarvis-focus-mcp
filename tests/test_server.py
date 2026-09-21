@@ -122,8 +122,12 @@ def test_mcp_endpoint_accepts_valid_tokens_bearer_and_raw_header():
         # AI Edge Gallery's MCP UI is a raw "header name / header value" pair,
         # not an Authorization-scheme picker — support that shape too.
         raw_response = client.post("/mcp", json={}, headers={"X-MCP-Token": "secret-token"})
+        # A trailing newline from copy-pasting the token (e.g. from a chat
+        # code block) shouldn't break auth either.
+        whitespace_response = client.post("/mcp", json={}, headers={"X-MCP-Token": "  secret-token\n"})
     assert bearer_response.status_code != 401
     assert raw_response.status_code != 401
+    assert whitespace_response.status_code != 401
 
 
 def test_mcp_endpoint_rejects_wrong_raw_token_header():
