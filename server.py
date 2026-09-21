@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 from mcp.server.mcpserver import MCPServer
+from mcp.server.streamable_http import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -156,7 +157,13 @@ async def health_check(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok", "service": "jarvis-focus-mcp"})
 
 
-mcp_app: Starlette = mcp.streamable_http_app()
+mcp_app: Starlette = mcp.streamable_http_app(
+    # DNS-rebinding protection is aimed at browser clients; this server's
+    # real access control is the bearer token below, and the MCP client here
+    # is a native mobile HTTP client whose Host/Origin headers aren't
+    # predictable in advance.
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
 mcp_app.add_route("/healthz", health_check, methods=["GET"])
 app = BearerAuthMiddleware(mcp_app, MCP_AUTH_TOKEN)
 
